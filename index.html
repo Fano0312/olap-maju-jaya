@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>CRUD Penjualan - Maju Jaya</title>
+
+<!-- ChartJS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- SheetJS (Excel) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background: #f4f6f9;
+    margin:0;
+    padding:20px;
+}
+h1{
+    text-align:center;
+    color:#2c3e50;
+}
+.container{
+    max-width:1000px;
+    margin:auto;
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 5px 20px rgba(0,0,0,0.1);
+}
+.form-input{
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+    gap:10px;
+}
+.form-input input, .form-input select, button{
+    padding:10px;
+    font-size:15px;
+}
+button{
+    background:#1abc9c;
+    color:white;
+    border:none;
+    cursor:pointer;
+    border-radius:5px;
+}
+button:hover{
+    background:#16a085;
+}
+table{
+    width:100%;
+    border-collapse: collapse;
+    margin-top:20px;
+}
+th,td{
+    padding:10px;
+    border:1px solid #ddd;
+    text-align:center;
+}
+th{
+    background:#2c3e50;
+    color:white;
+}
+.action button{
+    margin:2px;
+    background:#3498db;
+}
+.delete{
+    background:#e74c3c !important;
+}
+.filters{
+    margin-top:20px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+.footer{
+    text-align:center;
+    margin-top:20px;
+    color:gray;
+}
+canvas{
+    margin-top:40px;
+}
+.excel{
+    background:#1D6F42 !important;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1> CRUD Penjualan Toko Sembako "Maju Jaya"</h1>
+
+<h3>Tambah / Edit Data</h3>
+<div class="form-input">
+    <input type="hidden" id="editIndex">
+    <select id="produk">
+        <option value="">Pilih Produk</option>
+        <option>Beras</option>
+        <option>Gula</option>
+        <option>Minyak</option>
+    </select>
+
+    <select id="bulan">
+        <option value="">Pilih Bulan</option>
+        <option>Januari</option>
+        <option>Februari</option>
+        <option>Maret</option>
+    </select>
+
+    <input type="number" id="tahun" value="2024">
+    <input type="number" id="jumlah" placeholder="Jumlah Terjual">
+
+    <button onclick="simpan()">Simpan Data</button>
+</div>
+
+<div class="filters">
+    <button onclick="drillDown()">🔍 Drill Down</button>
+    <button onclick="sliceBeras()">🍚 Slice Beras</button>
+    <button onclick="diceFebruari()">📅 Dice Februari</button>
+    <button onclick="tampil()">🔁 Tampilkan Semua</button>
+    <button onclick="hapusSemua()">🗑 Hapus Semua</button>
+    <button class="excel" onclick="exportExcel()">📊 Export Excel</button>
+</div>
+
+<table id="tabelPenjualan">
+<thead>
+<tr>
+    <th>Produk</th>
+    <th>Bulan</th>
+    <th>Tahun</th>
+    <th>Jumlah</th>
+    <th>Aksi</th>
+</tr>
+</thead>
+<tbody id="dataTable"></tbody>
+</table>
+
+<h3>📈 Grafik Penjualan</h3>
+<canvas id="chartPenjualan"></canvas>
+
+<div class="footer">
+    <p>@2025 SISTEM OLAP Fano-All Rights Reserved</p>
+</div>
+
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem("penjualan")) || [];
+let chart;
+
+function simpan(){
+    const produk = document.getElementById("produk").value;
+    const bulan = document.getElementById("bulan").value;
+    const tahun = document.getElementById("tahun").value;
+    const jumlah = parseInt(document.getElementById("jumlah").value);
+    const editIndex = document.getElementById("editIndex").value;
+
+    if(!produk || !bulan || !tahun || !jumlah){
+        alert("Isi semuanya dulu!");
+        return;
+    }
+
+    if(editIndex === ""){
+        data.push({produk, bulan, tahun, jumlah});
+    } else {
+        data[editIndex] = {produk, bulan, tahun, jumlah};
+        document.getElementById("editIndex").value = "";
+    }
+
+    localStorage.setItem("penjualan", JSON.stringify(data));
+    tampil();
+    reset();
+    updateChart();
+}
+
+function tampil(){
+    const table = document.getElementById("dataTable");
+    table.innerHTML = "";
+
+    data.forEach((d,i)=>{
+        table.innerHTML += `
+        <tr>
+            <td>${d.produk}</td>
+            <td>${d.bulan}</td>
+            <td>${d.tahun}</td>
+            <td>${d.jumlah}</td>
+            <td class="action">
+                <button onclick="edit(${i})">Edit</button>
+                <button class="delete" onclick="hapus(${i})">Hapus</button>
+            </td>
+        </tr>
+        `;
+    });
+}
+
+function edit(i){
+    const d = data[i];
+    document.getElementById("produk").value = d.produk;
+    document.getElementById("bulan").value = d.bulan;
+    document.getElementById("tahun").value = d.tahun;
+    document.getElementById("jumlah").value = d.jumlah;
+    document.getElementById("editIndex").value = i;
+}
+
+function hapus(i){
+    if(confirm("Yakin mau hapus?")){
+        data.splice(i,1);
+        localStorage.setItem("penjualan", JSON.stringify(data));
+        tampil();
+        updateChart();
+    }
+}
+
+function hapusSemua(){
+    if(confirm("Yakin hapus semua data?")){
+        data = [];
+        localStorage.clear();
+        tampil();
+        updateChart();
+    }
+}
+
+function reset(){
+    document.getElementById("produk").value = "";
+    document.getElementById("bulan").value = "";
+    document.getElementById("jumlah").value = "";
+}
+
+/* FILTER OLAP */
+function drillDown(){
+    tampil();
+    alert("Drill Down: Semua data ditampilkan");
+}
+
+function sliceBeras(){
+    const table = document.getElementById("dataTable");
+    table.innerHTML = "";
+    data.filter(d => d.produk === "Beras")
+    .forEach(d => {
+        table.innerHTML += `
+        <tr>
+            <td>${d.produk}</td>
+            <td>${d.bulan}</td>
+            <td>${d.tahun}</td>
+            <td>${d.jumlah}</td>
+            <td>-</td>
+        </tr>`;
+    });
+}
+
+function diceFebruari(){
+    const table = document.getElementById("dataTable");
+    table.innerHTML = "";
+    data.filter(d => d.bulan === "Februari")
+    .forEach(d => {
+        table.innerHTML += `
+        <tr>
+            <td>${d.produk}</td>
+            <td>${d.bulan}</td>
+            <td>${d.tahun}</td>
+            <td>${d.jumlah}</td>
+            <td>-</td>
+        </tr>`;
+    });
+}
+
+/* GRAFIK */
+function updateChart(){
+    const bulan = ["Januari","Februari","Maret"];
+
+    const getData = (produk) =>
+        bulan.map(b => {
+            let item = data.find(d => d.produk === produk && d.bulan === b);
+            return item ? item.jumlah : 0;
+        });
+
+    if(chart) chart.destroy();
+
+    const ctx = document.getElementById("chartPenjualan");
+
+    chart = new Chart(ctx, {
+        type: "bar",
+        data:{
+            labels: bulan,
+            datasets:[
+                {label:"Beras", data:getData("Beras"), backgroundColor:"#1abc9c"},
+                {label:"Gula", data:getData("Gula"), backgroundColor:"#3498db"},
+                {label:"Minyak", data:getData("Minyak"), backgroundColor:"#e67e22"}
+            ]
+        },
+        options:{responsive:true}
+    });
+}
+
+/* EXPORT EXCEL */
+function exportExcel(){
+    let table = document.getElementById("tabelPenjualan");
+    let clone = table.cloneNode(true);
+
+    for (let row of clone.rows) {
+        row.deleteCell(row.cells.length - 1);
+    }
+
+    let wb = XLSX.utils.book_new();
+    let ws = XLSX.utils.table_to_sheet(clone);
+
+    XLSX.utils.book_append_sheet(wb, ws, "Penjualan 2024");
+    XLSX.writeFile(wb, "Data_Penjualan_Fano_Jaya.xlsx");
+}
+
+/* DATA AWAL */
+if(data.length === 0){
+data = [
+{produk:"Beras",bulan:"Januari", tahun:2024, jumlah:120},
+{produk:"Gula",bulan:"Januari", tahun:2024, jumlah:80},
+{produk:"Minyak",bulan:"Januari", tahun:2024, jumlah:60},
+
+{produk:"Beras",bulan:"Februari", tahun:2024, jumlah:140},
+{produk:"Gula",bulan:"Februari", tahun:2024, jumlah:70},
+{produk:"Minyak",bulan:"Februari", tahun:2024, jumlah:65},
+
+{produk:"Beras",bulan:"Maret", tahun:2024, jumlah:100},
+{produk:"Gula",bulan:"Maret", tahun:2024, jumlah:90},
+{produk:"Minyak",bulan:"Maret", tahun:2024, jumlah:75}
+];
+localStorage.setItem("penjualan", JSON.stringify(data));
+}
+
+tampil();
+updateChart();
+</script>
+
+</body>
+</html>
